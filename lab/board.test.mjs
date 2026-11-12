@@ -84,13 +84,18 @@ test('R1 + R4: a new incident appears at the top within one refresh, no reload',
   await close();
 });
 
-test('R2: Ack acks that incident with the latest cursor and marks the row; the mark survives refreshes', async () => {
+test('R2: Ack asks first, naming the id; yes acks that incident with the latest cursor; the mark survives refreshes', async () => {
   const { page, calls, close } = await open({ script: (n) => (n < 2 ? BASE : [LATE, ...BASE]) });
   await page.locator('[data-id="INC-3"]').waitFor();
   assert.equal(await page.locator('[data-testid="ack"]').count(), 3);
   const sent = calls.incidents.length;
   await page.locator('[data-id="INC-2"] [data-testid="ack"]').click();
+  assert.match(await page.locator('[data-testid="confirm"]:visible').innerText(), /INC-2/);
+  assert.equal(await page.locator('[data-id="INC-2"] [data-testid="confirm"]').count(), 1, 'the confirm sits in its row');
+  assert.equal(calls.acks.length, 0, 'nothing is acked before the yes');
+  await page.locator('[data-testid="confirm-ack"]:visible').click();
   await page.locator('[data-id="INC-2"] [data-testid="acked"]').waitFor();
+  assert.equal(await page.locator('[data-testid="confirm"]').count(), 0);
   assert.equal(calls.acks.length, 1);
   assert.equal(calls.acks[0].id, 'INC-2');
   assert.ok(Number(calls.acks[0].cursor.slice(1)) >= sent, 'ack carries the latest cursor');
@@ -105,9 +110,53 @@ test('R2: Ack acks that incident with the latest cursor and marks the row; the m
 test('R2: a refused ack does not mark the row', async () => {
   const { page, close } = await open({ ackStatus: 409 });
   await page.locator('[data-id="INC-2"] [data-testid="ack"]').click();
+  await page.locator('[data-testid="confirm-ack"]').click();
   await page.locator('[data-id="INC-2"] .ack-error').waitFor();
   assert.equal(await page.locator('[data-testid="acked"]').count(), 0);
   assert.equal(await page.locator('[data-id="INC-2"] [data-testid="ack"]').isEnabled(), true);
+  await close();
+});
+
+test('confirm: Cancel and Escape ack nothing and give the Ack button back', async () => {
+  const { page, calls, close } = await open();
+  const ackButton = page.locator('[data-id="INC-2"] [data-testid="ack"]');
+  await ackButton.click();
+  assert.equal(await ackButton.isVisible(), false);
+  await page.locator('[data-testid="confirm-cancel"]').click();
+  assert.equal(await page.locator('[data-testid="confirm"]').count(), 0);
+  assert.equal(await ackButton.isVisible(), true);
+  await ackButton.click();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('[data-testid="confirm"]').count(), 0);
+  await page.waitForTimeout(2500);
+  assert.equal(calls.acks.length, 0);
+  assert.equal(await page.locator('[data-testid="acked"]').count(), 0);
+  await close();
+});
+
+test('the race product saw: a press where the meant row was opens a confirm naming the row that moved in; nothing is acked', async () => {
+  const { page, calls, close } = await open({ script: (n) => (n < 2 ? BASE : [LATE, ...BASE]) });
+  const box = await page.locator('[data-id="INC-2"] [data-testid="ack"]').boundingBox();
+  const at = [box.x + box.width / 2, box.y + box.height / 2];
+  await page.mouse.move(...at);
+  await page.evaluate(() => { window.__gone = 0; new MutationObserver((rs) => { for (const r of rs) for (const n of r.removedNodes) if (n.matches?.('[data-testid="incident-row"]')) window.__gone += 1; }).observe(document, { childList: true, subtree: true }); });
+  await page.locator('[data-id="INC-3"]').waitFor();
+  await page.mouse.click(...at); // meant INC-2; INC-3 is under the pointer now
+  assert.match(await page.locator('[data-testid="confirm"]:visible').innerText(), /INC-3/);
+  assert.doesNotMatch(await page.locator('[data-testid="confirm"]:visible').innerText(), /INC-2/);
+  await page.mouse.click(...at); // a second press on the same spot
+  assert.equal(calls.acks.length, 0, 'two presses on one spot never ack');
+  // On-call reads the id, and picks the row they meant; only one confirm is ever open.
+  await page.locator('[data-id="INC-2"] [data-testid="ack"]').click();
+  assert.equal(await page.locator('[data-testid="confirm"]').count(), 1);
+  await page.locator('[data-id="INC-3"] [data-testid="ack"]').click();
+  assert.equal(await page.locator('[data-testid="confirm"]').count(), 1);
+  await page.locator('[data-testid="confirm-cancel"]').click();
+  await page.locator('[data-id="INC-2"] [data-testid="ack"]').click();
+  await page.locator('[data-testid="confirm-ack"]:visible').click();
+  await page.locator('[data-id="INC-2"] [data-testid="acked"]').waitFor();
+  assert.deepEqual(calls.acks.map((a) => a.id), ['INC-2']);
+  assert.equal(await page.evaluate(() => window.__gone), 0, 'no row left the board while it changed');
   await close();
 });
 

@@ -44,10 +44,44 @@ function markAcked(row, reply) {
   row.append(mark);
 }
 
-async function onAck(id, row, button) {
+/** The one open confirm, if any: only one incident can be waiting for a yes at a time. */
+let closeConfirm = null;
+
+// R2 as product decided it: Ack asks first, and the question names the incident id. Rows still move
+// when a new incident lands, so the id in the question is what on-call checks before saying yes.
+function askToAck(id, row, button) {
+  closeConfirm?.();
+  row.querySelector('.ack-error')?.remove();
+  const confirm = el('span', { 'data-testid': 'confirm', class: 'confirm', role: 'group', 'aria-label': `Confirm ack of ${id}` });
+  const yes = el('button', { 'data-testid': 'confirm-ack', type: 'button' }, `Yes, ack ${id}`);
+  // Cancel sits where Ack was, so a second press on the same spot never acks.
+  const no = el('button', { 'data-testid': 'confirm-cancel', type: 'button', class: 'quiet' }, 'Cancel');
+  confirm.append(el('span', { class: 'ask' }, `Ack ${id}?`), yes, no);
+  const close = () => {
+    confirm.remove();
+    button.hidden = false;
+    if (closeConfirm === close) closeConfirm = null;
+  };
+  closeConfirm = close;
+  yes.addEventListener('click', () => {
+    close();
+    sendAck(id, row, button);
+  });
+  no.addEventListener('click', () => {
+    close();
+    button.focus();
+  });
+  confirm.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') no.click();
+  });
+  button.hidden = true;
+  row.append(confirm);
+  yes.focus();
+}
+
+async function sendAck(id, row, button) {
   button.disabled = true;
   button.textContent = 'Acking…';
-  row.querySelector('.ack-error')?.remove();
   try {
     const reply = await ack(id); // R2
     acked.set(id, reply);
@@ -64,7 +98,7 @@ function buildRow(i) {
   const row = el('li', { 'data-testid': 'incident-row', 'data-id': i.id, class: `row ${/^sev\d$/.test(i.severity) ? i.severity : ''}` });
   const time = el('time', { datetime: i.openedAt, title: i.openedAt }, localTime(i.openedAt));
   const button = el('button', { 'data-testid': 'ack', type: 'button', 'aria-label': `Ack ${i.id}` }, 'Ack');
-  button.addEventListener('click', () => onAck(i.id, row, button));
+  button.addEventListener('click', () => askToAck(i.id, row, button));
   row.append(
     el('span', { class: 'id' }, i.id),
     el('span', { class: 'sev' }, i.severity),
