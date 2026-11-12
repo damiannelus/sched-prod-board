@@ -37,7 +37,8 @@ if (step === '1') {
   const ack = JSON.parse(await readFile(ackPath, 'utf8'));
   check('evidence.receipt = the recorded ack reply, whole', typeof ack.receipt === 'string' && ev.receipt === ack.receipt, mask(ev.receipt));
   check('ack reply is for the incident the report names', report.includes(ack.id), `${ack.id} ackedAt ${ack.ackedAt}`);
-  check('evidence has exactly the five fields', Object.keys(ev).sort().join() === 'at,flow,receipt,sha,videoLink', Object.keys(ev).join());
+  check('evidence has the five fields plus expected and got', Object.keys(ev).sort().join() === 'at,expected,flow,got,receipt,sha,videoLink', Object.keys(ev).join());
+  check('evidence.got = the ack reply id, and differs from expected', ev.got === ack.id && /^INC-\d+$/.test(ev.expected ?? '') && ev.expected !== ev.got, `expected ${ev.expected} got ${ev.got}`);
 } else {
   check('evidence.runUrl is an Actions run (when present)', ev.runUrl === undefined || /^https:\/\/github\.com\/[^/]+\/[^/]+\/actions\/runs\/\d+$/.test(ev.runUrl), ev.runUrl ?? 'absent');
 }
