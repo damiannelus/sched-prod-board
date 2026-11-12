@@ -9,3 +9,12 @@ h1 { margin: 0; font-size: 22px; }
 .row.sev2 .sev { color: #a15c00; }
 .row time { color: #555; font-variant-numeric: tabular-nums; }
 footer { color: #777; font-size: 13px; }
+.note { margin: 8px 12px; color: #555; }
+.note.error { color: #b00020; }
+[hidden] { display: none !important; }
+.row button { font: inherit; min-height: 32px; padding: 0 14px; border: 1px solid #1d1d1f; border-radius: 6px; background: #1d1d1f; color: #fff; cursor: pointer; }
+.row button:disabled { opacity: 0.6; cursor: progress; }
+.row button:focus-visible { outline: 3px solid #6f55c9; outline-offset: 2px; }
+.row.is-acked { background: #f1f8f1; }
+.row .acked { color: #1b6e2c; font-weight: 600; white-space: nowrap; }
+.row .ack-error { grid-column: 1 / -1; color: #b00020; padding-bottom: 6px; }
